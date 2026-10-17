@@ -143,10 +143,10 @@ private fun NeVarApp(activity: MainActivity) {
     MaterialTheme(colorScheme = colors) {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
-            contentWindowInsets = WindowInsets(0, 0, 0, 0),
+            contentWindowInsets = WindowInsets.safeDrawing,
             topBar = {
                 Surface(color = navy) {
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                    Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 18.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                         Column {
                             Text("NE VAR?", color = Color.White, fontWeight = FontWeight.Black, fontSize = 25.sp)
                             Text("Bak. Keşfet. Katıl. Paylaş.", color = Color(0xFFDFD6FA), fontSize = 11.sp)
@@ -156,7 +156,7 @@ private fun NeVarApp(activity: MainActivity) {
                 }
             },
             bottomBar = {
-                NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+                NavigationBar(containerColor = MaterialTheme.colorScheme.surface, windowInsets = NavigationBarDefaults.windowInsets) {
                     val labels = listOf("Ana Sayfa", "Keşfet", "Paylaş", "Harita", "Profil")
                     val icons = listOf(Icons.Filled.Home, Icons.Filled.Explore, Icons.Filled.AddCircle, Icons.Filled.Place, Icons.Filled.Person)
                     labels.forEachIndexed { index, label ->
