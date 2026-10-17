@@ -3,6 +3,14 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-release-main
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -14,7 +22,6 @@ jobs:
           java-version: '17'
       - name: Install Android SDK components
         run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"
       - uses: gradle/actions/setup-gradle@v4
@@ -22,8 +29,23 @@ jobs:
           gradle-version: '8.9'
       - name: Build debug APK
         run: gradle :app:assembleDebug --stacktrace
+      - name: Prepare direct-download APK
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk NE-VAR-debug.apk
+          test -s NE-VAR-debug.apk
+          sha256sum NE-VAR-debug.apk > NE-VAR-debug.apk.sha256
       - uses: actions/upload-artifact@v4
-        if: success()
         with:
           name: nevar-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          path: |
+            NE-VAR-debug.apk
+            NE-VAR-debug.apk.sha256
+      - name: Publish direct APK download on GitHub Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: beta-build-${{ github.run_number }}
+        run: |
+          gh release create "$TAG" NE-VAR-debug.apk NE-VAR-debug.apk.sha256 \
+            --target "$GITHUB_SHA" \
+            --title "NE VAR? Android Beta Build ${{ github.run_number }}" \
+            --notes "Test APK (debug signed). Not a production release. APK can be downloaded directly without ZIP."
