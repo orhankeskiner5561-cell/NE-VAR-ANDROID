@@ -10,6 +10,14 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import android.net.Uri
 import android.graphics.BitmapFactory
+import android.graphics.Bitmap
+import android.os.Build
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.runtime.DisposableEffect
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.foundation.Image
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -60,6 +68,7 @@ private val examples = listOf(
 )
 private val provinces = """Adana|Adıyaman|Afyonkarahisar|Ağrı|Amasya|Ankara|Antalya|Artvin|Aydın|Balıkesir|Bilecik|Bingöl|Bitlis|Bolu|Burdur|Bursa|Çanakkale|Çankırı|Çorum|Denizli|Diyarbakır|Edirne|Elazığ|Erzincan|Erzurum|Eskişehir|Gaziantep|Giresun|Gümüşhane|Hakkari|Hatay|Isparta|Mersin|İstanbul|İzmir|Kars|Kastamonu|Kayseri|Kırklareli|Kırşehir|Kocaeli|Konya|Kütahya|Malatya|Manisa|Kahramanmaraş|Mardin|Muğla|Muş|Nevşehir|Niğde|Ordu|Rize|Sakarya|Samsun|Siirt|Sinop|Sivas|Tekirdağ|Tokat|Trabzon|Tunceli|Şanlıurfa|Uşak|Van|Yozgat|Zonguldak|Aksaray|Bayburt|Karaman|Kırıkkale|Batman|Şırnak|Bartın|Ardahan|Iğdır|Yalova|Karabük|Kilis|Osmaniye|Düzce""".split("|").sortedWith(compareBy(java.text.Collator.getInstance(Locale("tr", "TR"))) { it })
 private fun normalizedTr(value: String) = java.text.Normalizer.normalize(value.lowercase(Locale("tr", "TR")), java.text.Normalizer.Form.NFD).replace(Regex("[\\u0300-\\u036f]"), "").replace("ı", "i")
+private fun canonicalCity(value: String): String = provinces.firstOrNull { normalizedTr(it) == normalizedTr(value.trim()) } ?: value.trim()
 private val categories = listOf("Tümü", "Doğa", "Sanat", "Yeme İçme", "Spor", "Teknoloji", "Topluluk")
 private fun encodePosts(items: List<Discovery>): String = JSONArray().apply {
     items.forEach { put(JSONObject().apply {
@@ -90,7 +99,7 @@ private fun NeVarApp(activity: MainActivity) {
     val posts = remember(prefs[postsKey]) { decodePosts(prefs[postsKey] ?: "[]") }
     val saved = remember(prefs[savedKey]) { (prefs[savedKey] ?: "").split("|").filter { it.isNotBlank() }.toSet() }
     val dark = prefs[darkKey] ?: false
-    val city = prefs[cityKey] ?: "Tüm şehirler"
+    val city = (prefs[cityKey] ?: "Tüm şehirler").let { if (it == "Tüm şehirler") it else canonicalCity(it) }
     var tab by remember { mutableStateOf(0) }
     var selected by remember { mutableStateOf<Discovery?>(null) }
     var search by remember { mutableStateOf("") }
@@ -116,6 +125,17 @@ private fun NeVarApp(activity: MainActivity) {
     var cityQuery by remember { mutableStateOf("") }
     val keyboard = LocalSoftwareKeyboardController.current
     val all = posts + examples
+    val view = LocalView.current
+    DisposableEffect(dark, view) {
+        val window = activity.window
+        @Suppress("DEPRECATION")
+        window.statusBarColor = (if (dark) Color(0xFF12101C) else Color(0xFFF8F7FC)).toArgb()
+        @Suppress("DEPRECATION")
+        window.navigationBarColor = (if (dark) Color(0xFF12101C) else Color.White).toArgb()
+        @Suppress("DEPRECATION")
+        window.decorView.systemUiVisibility = if (dark) 0 else android.view.View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or android.view.View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
+        onDispose { }
+    }
     val colors = if (dark) darkColorScheme(primary = Color(0xFFB9A5FF), background = Color(0xFF12101C), surface = Color(0xFF242036)) else lightColorScheme(primary = purple, background = Color(0xFFF8F7FC), surface = Color.White)
     BackHandler(selected != null || tab != 0) {
         if (selected != null) selected = null else tab = 0
@@ -123,9 +143,9 @@ private fun NeVarApp(activity: MainActivity) {
     MaterialTheme(colorScheme = colors) {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
-            contentWindowInsets = WindowInsets.safeDrawing,
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
             topBar = {
-                Surface(color = navy, modifier = Modifier.statusBarsPadding()) {
+                Surface(color = navy) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                         Column {
                             Text("NE VAR?", color = Color.White, fontWeight = FontWeight.Black, fontSize = 25.sp)
@@ -159,7 +179,7 @@ private fun NeVarApp(activity: MainActivity) {
                             if (item.photoPath != null) DiscoveryPhoto(item.photoPath, Modifier.fillMaxWidth().height(210.dp))
                             else Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(12.dp)) { Text(item.category + " • Fotoğraf eklenmemiş", modifier = Modifier.fillMaxWidth().padding(16.dp), color = MaterialTheme.colorScheme.onPrimaryContainer) }
                             Text(item.title, fontSize = 27.sp, fontWeight = FontWeight.Bold)
-                            Text(item.city + " • " + item.category, color = MaterialTheme.colorScheme.primary)
+                            Text(canonicalCity(item.city) + " • " + item.category, color = MaterialTheme.colorScheme.primary)
                             Text(if (item.demo) "DEMO KEŞİF" else "YEREL PAYLAŞIM", color = Color.Gray, fontSize = 12.sp)
                             Spacer(Modifier.height(12.dp))
                             Text(item.description)
@@ -224,7 +244,7 @@ private fun NeVarApp(activity: MainActivity) {
                         }
                         val filtered = all.filter {
                             (category == "Tümü" || it.category == category) &&
-                            (city == "Tüm şehirler" || it.city == city) &&
+                            (city == "Tüm şehirler" || normalizedTr(it.city) == normalizedTr(city)) &&
                             (search.isBlank() || normalizedTr(it.title + it.description + it.category).contains(normalizedTr(search)))
                         }
                         Text("${filtered.size} keşif • Örnek içerikler DEMO", color = Color.Gray, fontSize = 12.sp)
@@ -244,7 +264,7 @@ private fun NeVarApp(activity: MainActivity) {
                     }
                     2 -> {
                         LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(vertical = 16.dp)) {
-                            item { Text("Keşfini paylaş", fontSize = 25.sp, fontWeight = FontWeight.Bold) }
+                            item { Spacer(Modifier.height(8.dp)); Text("Keşfini paylaş", fontSize = 25.sp, fontWeight = FontWeight.Bold) }
                             item { Text("Paylaşımların bu cihazda saklanır. Henüz çevrimiçi yayınlanmaz.", color = Color.Gray) }
                             item { OutlinedTextField(draftTitle, { draftTitle = it }, label = { Text("Başlık") }, modifier = Modifier.fillMaxWidth()) }
                             item { OutlinedTextField(draftDescription, { draftDescription = it }, label = { Text("Açıklama") }, modifier = Modifier.fillMaxWidth(), minLines = 3) }
@@ -258,7 +278,7 @@ private fun NeVarApp(activity: MainActivity) {
                             }
                             item {
                                 Button(onClick = {
-                                    val item = Discovery(java.util.UUID.randomUUID().toString(), draftTitle.trim(), draftCategory, draftCity.trim(), draftDescription.trim(), false, draftPhoto)
+                                    val item = Discovery(java.util.UUID.randomUUID().toString(), draftTitle.trim(), draftCategory, canonicalCity(draftCity), draftDescription.trim(), false, draftPhoto)
                                     scope.launch { activity.store.edit { prefs ->
                                         prefs[postsKey] = encodePosts(listOf(item) + posts)
                                         // Photo path is stored atomically with the post JSON.
@@ -271,10 +291,10 @@ private fun NeVarApp(activity: MainActivity) {
                     3 -> {
                         Spacer(Modifier.height(20.dp))
                         Text("Harita ve şehirler", fontSize = 25.sp, fontWeight = FontWeight.Bold)
-                        Text("Harita servisi henüz bağlı değil. Aşağıdaki keşifler örnek içeriktir.", color = Color.Gray)
+                        Text("Harita servisi henüz bağlı değil. DEMO etiketli içerikler örnektir; gerçek konum gösterilmez.", color = Color.Gray)
                         LazyColumn {
                             items(all, key = { it.id }) { item ->
-                                ListItem(headlineContent = { Text(item.title) }, supportingContent = { Text(item.city) }, leadingContent = { Icon(Icons.Filled.Place, null, tint = purple) }, modifier = Modifier.clickable { selected = item })
+                                ListItem(headlineContent = { Text(item.title) }, supportingContent = { Text(canonicalCity(item.city) + if (item.demo) " • DEMO" else " • Yerel paylaşım") }, leadingContent = { Icon(Icons.Filled.Place, null, tint = purple) }, modifier = Modifier.clickable { selected = item })
                                 HorizontalDivider()
                             }
                         }
@@ -324,7 +344,7 @@ private fun DiscoveryCard(item: Discovery, isSaved: Boolean, onOpen: () -> Unit,
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(item.title, fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        Text(item.city, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(canonicalCity(item.city), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     IconButton(onClick = onSave) { Icon(if (isSaved) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder, contentDescription = "Kaydet", tint = if (isSaved) pink else MaterialTheme.colorScheme.onSurfaceVariant) }
                 }
@@ -338,9 +358,23 @@ private fun DiscoveryCard(item: Discovery, isSaved: Boolean, onOpen: () -> Unit,
 
 @Composable
 private fun DiscoveryPhoto(path: String?, modifier: Modifier = Modifier) {
-    val bitmap = remember(path) { path?.let { runCatching { BitmapFactory.decodeFile(it)?.asImageBitmap() }.getOrNull() } }
+    var bitmap by remember(path) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(path) {
+        bitmap = withContext(Dispatchers.IO) {
+            path?.let { filePath ->
+                runCatching {
+                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    BitmapFactory.decodeFile(filePath, bounds)
+                    var sample = 1
+                    while (bounds.outWidth / sample > 1200 || bounds.outHeight / sample > 1200) sample *= 2
+                    val options = BitmapFactory.Options().apply { inSampleSize = sample }
+                    BitmapFactory.decodeFile(filePath, options)?.asImageBitmap()
+                }.getOrNull()
+            }
+        }
+    }
     if (bitmap != null) {
-        Image(bitmap = bitmap, contentDescription = "Keşif fotoğrafı", modifier = modifier, contentScale = ContentScale.Crop)
+        Image(bitmap = bitmap!!, contentDescription = "Keşif fotoğrafı", modifier = modifier, contentScale = ContentScale.Crop)
     } else {
         Box(modifier.background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
             Icon(Icons.Filled.Image, contentDescription = "Fotoğraf yok", tint = MaterialTheme.colorScheme.onSurfaceVariant)
