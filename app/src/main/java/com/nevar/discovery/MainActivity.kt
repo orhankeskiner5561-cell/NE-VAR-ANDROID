@@ -7,6 +7,10 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import android.net.Uri
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import java.io.File
 import java.io.FileOutputStream
 import androidx.compose.foundation.*
@@ -44,7 +48,7 @@ private val savedKey = stringPreferencesKey("saved")
 private val darkKey = booleanPreferencesKey("dark")
 private val cityKey = stringPreferencesKey("city")
 private val photoKey = stringPreferencesKey("photo_paths")
-private data class Discovery(val id: String, val title: String, val category: String, val city: String, val description: String, val demo: Boolean = true)
+private data class Discovery(val id: String, val title: String, val category: String, val city: String, val description: String, val demo: Boolean = true, val photoPath: String? = null)
 private val examples = listOf(
     Discovery("demo1", "Sahil yürüyüşü", "Doğa", "Samsun", "Deniz kenarında keyifli bir yürüyüş fikri."),
     Discovery("demo2", "Seramik atölyesi", "Sanat", "İstanbul", "Yeni bir hobi keşfet."),
@@ -56,14 +60,14 @@ private val categories = listOf("Tümü", "Doğa", "Sanat", "Yeme İçme", "Spor
 private fun encodePosts(items: List<Discovery>): String = JSONArray().apply {
     items.forEach { put(JSONObject().apply {
         put("id", it.id); put("title", it.title); put("category", it.category)
-        put("city", it.city); put("description", it.description)
+        put("city", it.city); put("description", it.description); put("photoPath", it.photoPath ?: "")
     }) }
 }.toString()
 private fun decodePosts(raw: String): List<Discovery> = runCatching {
     val arr = JSONArray(raw)
     (0 until arr.length()).map { i ->
         val j = arr.getJSONObject(i)
-        Discovery(j.getString("id"), j.getString("title"), j.getString("category"), j.getString("city"), j.getString("description"), false)
+        Discovery(j.getString("id"), j.getString("title"), j.getString("category"), j.getString("city"), j.getString("description"), false, j.optString("photoPath").takeIf { it.isNotBlank() })
     }
 }.getOrDefault(emptyList())
 
@@ -145,6 +149,7 @@ private fun NeVarApp(activity: MainActivity) {
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         item {
                             Spacer(Modifier.height(12.dp))
+                            DiscoveryPhoto(item.photoPath, Modifier.fillMaxWidth().height(210.dp))
                             Text(item.title, fontSize = 27.sp, fontWeight = FontWeight.Bold)
                             Text(item.city + " • " + item.category, color = MaterialTheme.colorScheme.primary)
                             Text(if (item.demo) "DEMO KEŞİF" else "YEREL PAYLAŞIM", color = Color.Gray, fontSize = 12.sp)
@@ -222,6 +227,7 @@ private fun NeVarApp(activity: MainActivity) {
                             item { OutlinedTextField(draftDescription, { draftDescription = it }, label = { Text("Açıklama") }, modifier = Modifier.fillMaxWidth(), minLines = 3) }
                             item { OutlinedTextField(draftCity, { draftCity = it }, label = { Text("Şehir") }, modifier = Modifier.fillMaxWidth()) }
                             item { OutlinedButton(onClick = { photoPicker.launch("image/*") }) { Text(if (draftPhoto == null) "Fotoğraf seç" else "Fotoğraf seçildi ✓") } }
+                            if (draftPhoto != null) item { DiscoveryPhoto(draftPhoto, Modifier.fillMaxWidth().height(180.dp)) }
                             item {
                                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     categories.drop(1).forEach { name -> FilterChip(selected = draftCategory == name, onClick = { draftCategory = name }, label = { Text(name) }) }
@@ -229,10 +235,10 @@ private fun NeVarApp(activity: MainActivity) {
                             }
                             item {
                                 Button(onClick = {
-                                    val item = Discovery(java.util.UUID.randomUUID().toString(), draftTitle.trim(), draftCategory, draftCity.trim(), draftDescription.trim(), false)
+                                    val item = Discovery(java.util.UUID.randomUUID().toString(), draftTitle.trim(), draftCategory, draftCity.trim(), draftDescription.trim(), false, draftPhoto)
                                     scope.launch { activity.store.edit { prefs ->
                                         prefs[postsKey] = encodePosts(listOf(item) + posts)
-                                        if (draftPhoto != null) prefs[photoKey] = (prefs[photoKey] ?: "") + item.id + "=" + draftPhoto + "|"
+                                        // Photo path is stored atomically with the post JSON.
                                     } }
                                     draftTitle = ""; draftDescription = ""; draftCity = ""; draftPhoto = null; tab = 0
                                 }, enabled = draftTitle.isNotBlank() && draftCity.isNotBlank()) { Text("Cihaza kaydet") }
@@ -262,7 +268,7 @@ private fun NeVarApp(activity: MainActivity) {
                             }) }
                             item { Text("Paylaşımlarım (${posts.size})", fontSize = 21.sp, fontWeight = FontWeight.Bold) }
                             items(posts, key = { it.id }) { item ->
-                                ListItem(headlineContent = { Text(item.title) }, supportingContent = { Text(item.city) }, modifier = Modifier.clickable { selected = item })
+                                ListItem(headlineContent = { Text(item.title) }, supportingContent = { Text(item.city) }, leadingContent = { DiscoveryPhoto(item.photoPath, Modifier.size(60.dp)) }, modifier = Modifier.clickable { selected = item })
                             }
                             item { Text("Görünüm", fontWeight = FontWeight.Bold) }
                             item {
@@ -284,7 +290,8 @@ private fun NeVarApp(activity: MainActivity) {
 private fun DiscoveryCard(item: Discovery, isSaved: Boolean, onOpen: () -> Unit, onSave: () -> Unit) {
     Card(onClick = onOpen, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
         Column {
-            Box(Modifier.fillMaxWidth().height(92.dp).background(Brush.horizontalGradient(listOf(purple, pink, peach))), contentAlignment = Alignment.CenterStart) {
+            if (item.photoPath != null) DiscoveryPhoto(item.photoPath, Modifier.fillMaxWidth().height(160.dp))
+            else Box(Modifier.fillMaxWidth().height(92.dp).background(Brush.horizontalGradient(listOf(purple, pink, peach))), contentAlignment = Alignment.CenterStart) {
                 Column(Modifier.padding(18.dp)) {
                     Text(item.category.uppercase(), color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     Text(if (item.demo) "DEMO KEŞİF" else "YEREL PAYLAŞIM", color = Color.White, fontSize = 10.sp)
@@ -302,6 +309,18 @@ private fun DiscoveryCard(item: Discovery, isSaved: Boolean, onOpen: () -> Unit,
                 Spacer(Modifier.height(8.dp))
                 Text("Detayları gör →", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
             }
+        }
+    }
+}
+
+@Composable
+private fun DiscoveryPhoto(path: String?, modifier: Modifier = Modifier) {
+    val bitmap = remember(path) { path?.let { runCatching { BitmapFactory.decodeFile(it)?.asImageBitmap() }.getOrNull() } }
+    if (bitmap != null) {
+        Image(bitmap = bitmap, contentDescription = "Keşif fotoğrafı", modifier = modifier, contentScale = ContentScale.Crop)
+    } else {
+        Box(modifier.background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+            Icon(Icons.Filled.Image, contentDescription = "Fotoğraf yok", tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
