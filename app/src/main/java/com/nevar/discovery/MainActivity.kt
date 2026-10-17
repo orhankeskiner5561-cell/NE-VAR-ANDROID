@@ -4,6 +4,11 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.net.Uri
+import java.io.File
+import java.io.FileOutputStream
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -38,6 +43,7 @@ private val postsKey = stringPreferencesKey("posts")
 private val savedKey = stringPreferencesKey("saved")
 private val darkKey = booleanPreferencesKey("dark")
 private val cityKey = stringPreferencesKey("city")
+private val photoKey = stringPreferencesKey("photo_paths")
 private data class Discovery(val id: String, val title: String, val category: String, val city: String, val description: String, val demo: Boolean = true)
 private val examples = listOf(
     Discovery("demo1", "Sahil yürüyüşü", "Doğa", "Samsun", "Deniz kenarında keyifli bir yürüyüş fikri."),
@@ -84,6 +90,19 @@ private fun NeVarApp(activity: MainActivity) {
     var draftDescription by remember { mutableStateOf("") }
     var draftCity by remember { mutableStateOf("") }
     var draftCategory by remember { mutableStateOf("Doğa") }
+    var draftPhoto by remember { mutableStateOf<String?>(null) }
+    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        if (uri != null) {
+            runCatching {
+                val folder = File(activity.filesDir, "photos").apply { mkdirs() }
+                val dest = File(folder, java.util.UUID.randomUUID().toString() + ".jpg")
+                activity.contentResolver.openInputStream(uri)?.use { input ->
+                    FileOutputStream(dest).use { output -> input.copyTo(output) }
+                } ?: error("Photo cannot be opened")
+                draftPhoto = dest.absolutePath
+            }
+        }
+    }
     var showCities by remember { mutableStateOf(false) }
     val all = posts + examples
     val colors = if (dark) darkColorScheme(primary = Color(0xFFB9A5FF), background = Color(0xFF12101C), surface = Color(0xFF242036)) else lightColorScheme(primary = purple, background = Color(0xFFF8F7FC), surface = Color.White)
@@ -95,7 +114,7 @@ private fun NeVarApp(activity: MainActivity) {
             modifier = Modifier.fillMaxSize(),
             contentWindowInsets = WindowInsets.safeDrawing,
             topBar = {
-                Surface(color = navy) {
+                Surface(color = navy, modifier = Modifier.statusBarsPadding()) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                         Column {
                             Text("NE VAR?", color = Color.White, fontWeight = FontWeight.Black, fontSize = 25.sp)
@@ -202,6 +221,7 @@ private fun NeVarApp(activity: MainActivity) {
                             item { OutlinedTextField(draftTitle, { draftTitle = it }, label = { Text("Başlık") }, modifier = Modifier.fillMaxWidth()) }
                             item { OutlinedTextField(draftDescription, { draftDescription = it }, label = { Text("Açıklama") }, modifier = Modifier.fillMaxWidth(), minLines = 3) }
                             item { OutlinedTextField(draftCity, { draftCity = it }, label = { Text("Şehir") }, modifier = Modifier.fillMaxWidth()) }
+                            item { OutlinedButton(onClick = { photoPicker.launch("image/*") }) { Text(if (draftPhoto == null) "Fotoğraf seç" else "Fotoğraf seçildi ✓") } }
                             item {
                                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     categories.drop(1).forEach { name -> FilterChip(selected = draftCategory == name, onClick = { draftCategory = name }, label = { Text(name) }) }
@@ -210,8 +230,11 @@ private fun NeVarApp(activity: MainActivity) {
                             item {
                                 Button(onClick = {
                                     val item = Discovery(java.util.UUID.randomUUID().toString(), draftTitle.trim(), draftCategory, draftCity.trim(), draftDescription.trim(), false)
-                                    scope.launch { activity.store.edit { it[postsKey] = encodePosts(listOf(item) + posts) } }
-                                    draftTitle = ""; draftDescription = ""; draftCity = ""; tab = 0
+                                    scope.launch { activity.store.edit { prefs ->
+                                        prefs[postsKey] = encodePosts(listOf(item) + posts)
+                                        if (draftPhoto != null) prefs[photoKey] = (prefs[photoKey] ?: "") + item.id + "=" + draftPhoto + "|"
+                                    } }
+                                    draftTitle = ""; draftDescription = ""; draftCity = ""; draftPhoto = null; tab = 0
                                 }, enabled = draftTitle.isNotBlank() && draftCity.isNotBlank()) { Text("Cihaza kaydet") }
                             }
                         }
