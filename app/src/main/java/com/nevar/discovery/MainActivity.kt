@@ -286,11 +286,11 @@ private fun NeVarApp(activity: MainActivity) {
                             item { Text("Kaydedilenler", fontSize = 21.sp, fontWeight = FontWeight.Bold) }
                             val favourites = all.filter { saved.contains(it.id) }
                             if (favourites.isEmpty()) item { Text("Henüz kaydedilen keşif yok.") }
-                            items(favourites, key = { it.id }) { item -> DiscoveryCard(item, true, onOpen = { selected = item }, onSave = {
+                            items(favourites, key = { "favorite_" + it.id }) { item -> DiscoveryCard(item, true, onOpen = { selected = item }, onSave = {
                                 scope.launch { activity.store.edit { it[savedKey] = (saved - item.id).joinToString("|") } }
                             }) }
                             item { Text("Paylaşımlarım (${posts.size})", fontSize = 21.sp, fontWeight = FontWeight.Bold) }
-                            items(posts, key = { it.id }) { item ->
+                            items(posts, key = { "my_post_" + it.id }) { item ->
                                 ListItem(headlineContent = { Text(item.title) }, supportingContent = { Text(item.city) }, leadingContent = { DiscoveryPhoto(item.photoPath, Modifier.size(60.dp)) }, modifier = Modifier.clickable { selected = item })
                             }
                             item { Text("Görünüm", fontWeight = FontWeight.Bold) }
