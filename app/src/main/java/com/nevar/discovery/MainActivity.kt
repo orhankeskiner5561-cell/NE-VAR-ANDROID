@@ -1,6 +1,8 @@
 package com.nevar.discovery
 
 import android.os.Bundle
+import java.util.Locale
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.BackHandler
@@ -56,6 +58,8 @@ private val examples = listOf(
     Discovery("demo4", "Bisiklet turu", "Spor", "İzmir", "Şehirde hareketli bir gün geçir."),
     Discovery("demo5", "Teknoloji buluşması", "Teknoloji", "Bursa", "Yeni fikirleri keşfet.")
 )
+private val provinces = """Adana|Adıyaman|Afyonkarahisar|Ağrı|Amasya|Ankara|Antalya|Artvin|Aydın|Balıkesir|Bilecik|Bingöl|Bitlis|Bolu|Burdur|Bursa|Çanakkale|Çankırı|Çorum|Denizli|Diyarbakır|Edirne|Elazığ|Erzincan|Erzurum|Eskişehir|Gaziantep|Giresun|Gümüşhane|Hakkari|Hatay|Isparta|Mersin|İstanbul|İzmir|Kars|Kastamonu|Kayseri|Kırklareli|Kırşehir|Kocaeli|Konya|Kütahya|Malatya|Manisa|Kahramanmaraş|Mardin|Muğla|Muş|Nevşehir|Niğde|Ordu|Rize|Sakarya|Samsun|Siirt|Sinop|Sivas|Tekirdağ|Tokat|Trabzon|Tunceli|Şanlıurfa|Uşak|Van|Yozgat|Zonguldak|Aksaray|Bayburt|Karaman|Kırıkkale|Batman|Şırnak|Bartın|Ardahan|Iğdır|Yalova|Karabük|Kilis|Osmaniye|Düzce""".split("|").sortedWith(compareBy(java.text.Collator.getInstance(Locale("tr", "TR"))) { it })
+private fun normalizedTr(value: String) = java.text.Normalizer.normalize(value.lowercase(Locale("tr", "TR")), java.text.Normalizer.Form.NFD).replace(Regex("[\\u0300-\\u036f]"), "").replace("ı", "i")
 private val categories = listOf("Tümü", "Doğa", "Sanat", "Yeme İçme", "Spor", "Teknoloji", "Topluluk")
 private fun encodePosts(items: List<Discovery>): String = JSONArray().apply {
     items.forEach { put(JSONObject().apply {
@@ -108,6 +112,8 @@ private fun NeVarApp(activity: MainActivity) {
         }
     }
     var showCities by remember { mutableStateOf(false) }
+    var cityQuery by remember { mutableStateOf("") }
+    val keyboard = LocalSoftwareKeyboardController.current
     val all = posts + examples
     val colors = if (dark) darkColorScheme(primary = Color(0xFFB9A5FF), background = Color(0xFF12101C), surface = Color(0xFF242036)) else lightColorScheme(primary = purple, background = Color(0xFFF8F7FC), surface = Color.White)
     BackHandler(selected != null || tab != 0) {
@@ -124,7 +130,7 @@ private fun NeVarApp(activity: MainActivity) {
                             Text("NE VAR?", color = Color.White, fontWeight = FontWeight.Black, fontSize = 25.sp)
                             Text("Bak. Keşfet. Katıl. Paylaş.", color = Color(0xFFDFD6FA), fontSize = 11.sp)
                         }
-                        Text("BETA 0.2", color = Color.White, fontSize = 11.sp)
+                        Text("BETA " + BuildConfig.VERSION_NAME, color = Color.White, fontSize = 11.sp)
                     }
                 }
             },
@@ -149,7 +155,8 @@ private fun NeVarApp(activity: MainActivity) {
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         item {
                             Spacer(Modifier.height(12.dp))
-                            DiscoveryPhoto(item.photoPath, Modifier.fillMaxWidth().height(210.dp))
+                            if (item.photoPath != null) DiscoveryPhoto(item.photoPath, Modifier.fillMaxWidth().height(210.dp))
+                            else Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(12.dp)) { Text(item.category + " • Fotoğraf eklenmemiş", modifier = Modifier.fillMaxWidth().padding(16.dp), color = MaterialTheme.colorScheme.onPrimaryContainer) }
                             Text(item.title, fontSize = 27.sp, fontWeight = FontWeight.Bold)
                             Text(item.city + " • " + item.category, color = MaterialTheme.colorScheme.primary)
                             Text(if (item.demo) "DEMO KEŞİF" else "YEREL PAYLAŞIM", color = Color.Gray, fontSize = 12.sp)
@@ -190,15 +197,24 @@ private fun NeVarApp(activity: MainActivity) {
                     1 -> {
                         Spacer(Modifier.height(12.dp))
                         Text("Keşfet", fontSize = 25.sp, fontWeight = FontWeight.Bold)
-                        OutlinedTextField(search, { search = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Yer, şehir veya deneyim ara") }, singleLine = true, leadingIcon = { Icon(Icons.Filled.Search, null) })
-                        Box {
-                            OutlinedButton(onClick = { showCities = true }) { Text("📍 " + city + " ▾") }
-                            DropdownMenu(expanded = showCities, onDismissRequest = { showCities = false }) {
-                                listOf("Tüm şehirler", "Samsun", "İstanbul", "Ankara", "İzmir", "Bursa").forEach { name ->
-                                    DropdownMenuItem(text = { Text(name) }, onClick = {
-                                        showCities = false
-                                        scope.launch { activity.store.edit { it[cityKey] = name } }
-                                    })
+                        OutlinedTextField(search, { search = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Mekân, etkinlik veya deneyim ara") }, singleLine = true, leadingIcon = { Icon(Icons.Filled.Search, null) })
+                        OutlinedButton(onClick = { cityQuery = ""; keyboard?.hide(); showCities = true }) { Text("📍 " + city + " ▾") }
+                        if (showCities) {
+                            ModalBottomSheet(onDismissRequest = { showCities = false }) {
+                                Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp)) {
+                                    Text("Şehir seç", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                                    OutlinedTextField(cityQuery, { cityQuery = it }, modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text("81 il arasında ara") })
+                                    Spacer(Modifier.height(8.dp))
+                                    LazyColumn(Modifier.fillMaxWidth().heightIn(max = 430.dp)) {
+                                        items(listOf("Tüm şehirler") + provinces.filter { normalizedTr(it).contains(normalizedTr(cityQuery)) }) { name ->
+                                            ListItem(headlineContent = { Text(name) }, modifier = Modifier.fillMaxWidth().clickable {
+                                                showCities = false
+                                                keyboard?.hide()
+                                                search = ""
+                                                scope.launch { activity.store.edit { it[cityKey] = name } }
+                                            })
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -208,7 +224,7 @@ private fun NeVarApp(activity: MainActivity) {
                         val filtered = all.filter {
                             (category == "Tümü" || it.category == category) &&
                             (city == "Tüm şehirler" || it.city == city) &&
-                            (search.isBlank() || (it.title + it.city + it.description + it.category).contains(search, ignoreCase = true))
+                            (search.isBlank() || normalizedTr(it.title + it.description + it.category).contains(normalizedTr(search)))
                         }
                         Text("${filtered.size} keşif • Örnek içerikler DEMO", color = Color.Gray, fontSize = 12.sp)
                         LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(vertical = 10.dp)) {
@@ -216,7 +232,13 @@ private fun NeVarApp(activity: MainActivity) {
                                 val updated = if (saved.contains(item.id)) saved - item.id else saved + item.id
                                 scope.launch { activity.store.edit { it[savedKey] = updated.joinToString("|") } }
                             }) }
-                            if (filtered.isEmpty()) item { Text("Aramana uygun keşif bulunamadı. Filtreleri değiştirebilirsin.") }
+                            if (filtered.isEmpty()) item {
+                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Text(if (city != "Tüm şehirler" && search.isBlank()) "$city\u0027da henüz keşif bulunamadı." else "Aramana uygun keşif bulunamadı.", fontWeight = FontWeight.Bold)
+                                    Text("Bu şehirde ilk keşfi sen paylaşabilirsin.")
+                                    Button(onClick = { draftCity = if (city == "Tüm şehirler") "" else city; keyboard?.hide(); tab = 2 }) { Text("Keşif Paylaş") }
+                                }
+                            }
                         }
                     }
                     2 -> {
@@ -291,7 +313,7 @@ private fun DiscoveryCard(item: Discovery, isSaved: Boolean, onOpen: () -> Unit,
     Card(onClick = onOpen, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
         Column {
             if (item.photoPath != null) DiscoveryPhoto(item.photoPath, Modifier.fillMaxWidth().height(160.dp))
-            else Box(Modifier.fillMaxWidth().height(92.dp).background(Brush.horizontalGradient(listOf(purple, pink, peach))), contentAlignment = Alignment.CenterStart) {
+            else Box(Modifier.fillMaxWidth().height(58.dp).background(Brush.horizontalGradient(listOf(purple, pink, peach))), contentAlignment = Alignment.CenterStart) {
                 Column(Modifier.padding(18.dp)) {
                     Text(item.category.uppercase(), color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     Text(if (item.demo) "DEMO KEŞİF" else "YEREL PAYLAŞIM", color = Color.White, fontSize = 10.sp)
