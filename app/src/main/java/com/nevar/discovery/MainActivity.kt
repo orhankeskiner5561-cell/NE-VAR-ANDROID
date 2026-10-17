@@ -82,6 +82,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun NeVarApp(activity: MainActivity) {
     val scope = rememberCoroutineScope()
