@@ -76,13 +76,29 @@ private fun encodePosts(items: List<Discovery>): String = JSONArray().apply {
         put("city", it.city); put("description", it.description); put("photoPath", it.photoPath ?: "")
     }) }
 }.toString()
-private fun decodePosts(raw: String): List<Discovery> = runCatching {
-    val arr = JSONArray(raw)
-    (0 until arr.length()).map { i ->
-        val j = arr.getJSONObject(i)
-        Discovery(j.getString("id"), j.getString("title"), j.getString("category"), j.getString("city"), j.getString("description"), false, j.optString("photoPath").takeIf { it.isNotBlank() })
-    }
-}.getOrDefault(emptyList())
+private fun decodePosts(raw: String): List<Discovery> {
+    // Parse records independently: one damaged post must not hide every other saved post.
+    return runCatching {
+        val array = JSONArray(raw)
+        buildList {
+            for (index in 0 until array.length()) {
+                val entry = array.optJSONObject(index) ?: continue
+                val id = entry.optString("id").trim()
+                val title = entry.optString("title").trim()
+                if (id.isBlank() || title.isBlank()) continue
+                add(Discovery(
+                    id = id,
+                    title = title,
+                    category = entry.optString("category", "Doğa"),
+                    city = canonicalCity(entry.optString("city")),
+                    description = entry.optString("description"),
+                    demo = false,
+                    photoPath = entry.optString("photoPath").takeIf { it.isNotBlank() }
+                ))
+            }
+        }
+    }.getOrDefault(emptyList())
+}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
