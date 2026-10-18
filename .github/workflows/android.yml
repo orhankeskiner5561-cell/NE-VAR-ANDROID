@@ -43,8 +43,18 @@ jobs:
           set -euo pipefail
           test -s "$NEVAR_KEYSTORE_PATH" || { echo "::error::Signing keystore is missing or empty"; exit 1; }
           test -n "$NEVAR_KEYSTORE_PASSWORD" && test -n "$NEVAR_KEY_ALIAS" && test -n "$NEVAR_KEY_PASSWORD" || { echo "::error::Signing credentials missing"; exit 1; }
+          EXPECTED_KEYSTORE_SHA256="633e26309c6ebb418329d12d45b5a330bb792c8262a19f0d3c1b61b2976ef689"
+          ACTUAL_KEYSTORE_SHA256=$(sha256sum "$NEVAR_KEYSTORE_PATH" | cut -d ' ' -f1)
+          if [ "$ACTUAL_KEYSTORE_SHA256" != "$EXPECTED_KEYSTORE_SHA256" ]; then
+            echo "::error::Uploaded NEVAR_KEYSTORE_BASE64 contains a different keystore than the verified local backup. Re-upload the base64 of the verified JKS file."
+            exit 1
+          fi
+          if ! keytool -list -keystore "$NEVAR_KEYSTORE_PATH" -storepass "$NEVAR_KEYSTORE_PASSWORD" >/dev/null 2>&1; then
+            echo "::error::NEVAR_KEYSTORE_PASSWORD does not unlock the verified keystore"
+            exit 1
+          fi
           if ! keytool -list -keystore "$NEVAR_KEYSTORE_PATH" -storepass "$NEVAR_KEYSTORE_PASSWORD" -alias "$NEVAR_KEY_ALIAS" >/dev/null 2>&1; then
-            echo "::error::Keystore password or alias does not match the uploaded keystore"
+            echo "::error::NEVAR_KEY_ALIAS does not match the verified keystore"
             exit 1
           fi
           if ! keytool -importkeystore -srckeystore "$NEVAR_KEYSTORE_PATH" -srcstorepass "$NEVAR_KEYSTORE_PASSWORD" -srcalias "$NEVAR_KEY_ALIAS" -srckeypass "$NEVAR_KEY_PASSWORD" -destkeystore "$RUNNER_TEMP/signing-check.p12" -deststoretype PKCS12 -deststorepass "$NEVAR_KEYSTORE_PASSWORD" -destkeypass "$NEVAR_KEYSTORE_PASSWORD" -noprompt >/dev/null 2>&1; then
