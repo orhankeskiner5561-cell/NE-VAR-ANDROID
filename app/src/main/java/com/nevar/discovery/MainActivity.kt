@@ -289,7 +289,30 @@ private fun NeVarApp(activity: MainActivity) {
                             item { Text("Paylaşımların bu cihazda saklanır. Henüz çevrimiçi yayınlanmaz.", color = Color.Gray) }
                             item { OutlinedTextField(draftTitle, { draftTitle = it }, label = { Text("Başlık") }, modifier = Modifier.fillMaxWidth()) }
                             item { OutlinedTextField(draftDescription, { draftDescription = it }, label = { Text("Açıklama") }, modifier = Modifier.fillMaxWidth(), minLines = 3) }
-                            item { OutlinedTextField(draftCity, { draftCity = it }, label = { Text("Şehir") }, modifier = Modifier.fillMaxWidth()) }
+                            item {
+                                OutlinedButton(onClick = { cityQuery = ""; keyboard?.hide(); showCities = true }, modifier = Modifier.fillMaxWidth()) {
+                                    Icon(Icons.Filled.Place, contentDescription = null)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(if (draftCity.isBlank()) "Şehir seç (81 il)" else draftCity + " ▾")
+                                }
+                            }
+                            if (showCities) item {
+                                ModalBottomSheet(onDismissRequest = { showCities = false }) {
+                                    Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp)) {
+                                        Text("Paylaşımın şehrini seç", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                                        OutlinedTextField(cityQuery, { cityQuery = it }, modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text("Şehir ara") })
+                                        LazyColumn(Modifier.heightIn(max = 420.dp)) {
+                                            items(provinces.filter { normalizedTr(it).contains(normalizedTr(cityQuery)) }) { name ->
+                                                ListItem(headlineContent = { Text(name) }, modifier = Modifier.fillMaxWidth().clickable {
+                                                    draftCity = name
+                                                    showCities = false
+                                                    keyboard?.hide()
+                                                })
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                             item { OutlinedButton(onClick = { photoPicker.launch("image/*") }) { Text(if (draftPhoto == null) "Fotoğraf seç" else "Fotoğraf seçildi ✓") } }
                             if (draftPhoto != null) item { DiscoveryPhoto(draftPhoto, Modifier.fillMaxWidth().height(180.dp)) }
                             item {
