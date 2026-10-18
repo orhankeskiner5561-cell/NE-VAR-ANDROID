@@ -129,11 +129,14 @@ private fun NeVarApp(activity: MainActivity) {
     DisposableEffect(dark, view) {
         val window = activity.window
         @Suppress("DEPRECATION")
-        window.statusBarColor = (if (dark) Color(0xFF12101C) else Color(0xFFF8F7FC)).toArgb()
+        window.statusBarColor = navy.toArgb()
         @Suppress("DEPRECATION")
         window.navigationBarColor = (if (dark) Color(0xFF12101C) else Color.White).toArgb()
         @Suppress("DEPRECATION")
-        window.decorView.systemUiVisibility = if (dark) 0 else android.view.View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or android.view.View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
+        window.decorView.systemUiVisibility = if (dark) 0 else android.view.View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
+        // The top app bar is always navy: light status icons are required in both themes.
+        androidx.core.view.WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = false
+        androidx.core.view.WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = !dark
         onDispose { }
     }
     val colors = if (dark) darkColorScheme(primary = Color(0xFFB9A5FF), background = Color(0xFF12101C), surface = Color(0xFF242036)) else lightColorScheme(primary = purple, background = Color(0xFFF8F7FC), surface = Color.White)
