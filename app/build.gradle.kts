@@ -10,8 +10,22 @@ android {
         applicationId = "com.nevar.discovery"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        versionName = "0.3.2"
+        versionCode = providers.gradleProperty("nevarVersionCode").orNull?.toIntOrNull() ?: 5
+        versionName = providers.gradleProperty("nevarVersionName").orNull ?: "0.3.2"
+    }
+    signingConfigs {
+        create("permanent") {
+            storeFile = file(System.getenv("NEVAR_KEYSTORE_PATH") ?: "nevar-release.keystore")
+            storePassword = System.getenv("NEVAR_KEYSTORE_PASSWORD")
+            keyAlias = System.getenv("NEVAR_KEY_ALIAS")
+            keyPassword = System.getenv("NEVAR_KEY_PASSWORD")
+        }
+    }
+    buildTypes {
+        getByName("release") {
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("permanent")
+        }
     }
     buildFeatures { compose = true; buildConfig = true }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
