@@ -8,6 +8,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import android.content.Intent
 import android.net.Uri
 import android.graphics.BitmapFactory
 import android.graphics.Bitmap
@@ -141,6 +142,7 @@ private fun NeVarApp(activity: MainActivity) {
     var cityQuery by remember { mutableStateOf("") }
     val keyboard = LocalSoftwareKeyboardController.current
     val all = posts + examples
+    val localDiscoveries = posts
     val view = LocalView.current
     DisposableEffect(dark, view) {
         val window = activity.window
@@ -261,12 +263,12 @@ private fun NeVarApp(activity: MainActivity) {
                         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             categories.forEach { name -> FilterChip(selected = category == name, onClick = { category = name }, label = { Text(name) }) }
                         }
-                        val filtered = all.filter {
+                        val filtered = localDiscoveries.filter {
                             (category == "Tümü" || it.category == category) &&
                             (city == "Tüm şehirler" || normalizedTr(it.city) == normalizedTr(city)) &&
                             (search.isBlank() || normalizedTr(it.title + it.description + it.category).contains(normalizedTr(search)))
                         }
-                        Text("${filtered.size} keşif • Örnek içerikler DEMO", color = Color.Gray, fontSize = 12.sp)
+                        Text("${filtered.size} yerel keşif • Henüz çevrimiçi paylaşım yok", color = Color.Gray, fontSize = 12.sp)
                         LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(vertical = 10.dp)) {
                             items(filtered, key = { it.id }) { item -> DiscoveryCard(item, saved.contains(item.id), onOpen = { selected = item }, onSave = {
                                 val updated = if (saved.contains(item.id)) saved - item.id else saved + item.id
@@ -308,13 +310,48 @@ private fun NeVarApp(activity: MainActivity) {
                         }
                     }
                     3 -> {
-                        Spacer(Modifier.height(20.dp))
+                        Spacer(Modifier.height(12.dp))
                         Text("Harita ve şehirler", fontSize = 25.sp, fontWeight = FontWeight.Bold)
-                        Text("Harita servisi henüz bağlı değil. DEMO etiketli içerikler örnektir; gerçek konum gösterilmez.", color = Color.Gray)
-                        LazyColumn {
-                            items(all, key = { it.id }) { item ->
-                                ListItem(headlineContent = { Text(item.title) }, supportingContent = { Text(canonicalCity(item.city) + if (item.demo) " • DEMO" else " • Yerel paylaşım") }, leadingContent = { Icon(Icons.Filled.Place, null, tint = purple) }, modifier = Modifier.clickable { selected = item })
-                                HorizontalDivider()
+                        Text("Harita servisi henüz bağlı değil. Paylaşımların şehirlerini haritada arayabilir, yol tarifi uygulamasını açabilirsin.", color = Color.Gray, fontSize = 13.sp)
+                        Spacer(Modifier.height(12.dp))
+                        OutlinedButton(onClick = { cityQuery = ""; showCities = true }) { Text("📍 " + city + " ▾") }
+                        if (showCities) {
+                            ModalBottomSheet(onDismissRequest = { showCities = false }) {
+                                Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp)) {
+                                    Text("Şehir seç", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                                    OutlinedTextField(cityQuery, { cityQuery = it }, modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text("81 il arasında ara") })
+                                    LazyColumn(Modifier.heightIn(max = 420.dp)) {
+                                        items(listOf("Tüm şehirler") + provinces.filter { normalizedTr(it).contains(normalizedTr(cityQuery)) }) { name ->
+                                            ListItem(headlineContent = { Text(name) }, modifier = Modifier.fillMaxWidth().clickable {
+                                                showCities = false
+                                                scope.launch { activity.store.edit { it[cityKey] = name } }
+                                            })
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        val mapPosts = localDiscoveries.filter { city == "Tüm şehirler" || normalizedTr(it.city) == normalizedTr(city) }
+                        Text("${mapPosts.size} yerel paylaşım", color = Color.Gray, fontSize = 12.sp)
+                        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (mapPosts.isEmpty()) item {
+                                Text("Bu şehirde henüz konumlu paylaşım yok. İlk keşfi sen ekleyebilirsin.", modifier = Modifier.padding(vertical = 16.dp))
+                            }
+                            items(mapPosts, key = { "map_" + it.id }) { discovery ->
+                                Card(Modifier.fillMaxWidth()) {
+                                    Column(Modifier.padding(12.dp)) {
+                                        Text(discovery.title, fontWeight = FontWeight.Bold)
+                                        Text(discovery.city + " • Kesin adres eklenmemiş", color = Color.Gray, fontSize = 12.sp)
+                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            TextButton(onClick = { selected = discovery }) { Text("Detay") }
+                                            TextButton(onClick = {
+                                                val query = Uri.encode(discovery.city + ", Türkiye")
+                                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=" + query))
+                                                runCatching { activity.startActivity(intent) }
+                                            }) { Text("Şehri haritada aç ↗") }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
