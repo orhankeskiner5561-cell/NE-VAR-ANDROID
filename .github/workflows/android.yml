@@ -27,25 +27,37 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Build signed release APK
-        run: gradle :app:assembleRelease --stacktrace
-      - name: Prepare direct-download APK
+      - name: Restore signing key
+        env:
+          SIGNING_KEY: ${{ secrets.NEVAR_KEYSTORE_BASE64 }}
         run: |
-          cp app/build/outputs/apk/debug/app-debug.apk NE-VAR-debug.apk
-          test -s NE-VAR-debug.apk
-          sha256sum NE-VAR-debug.apk > NE-VAR-debug.apk.sha256
+          test -n "$SIGNING_KEY" || { echo "Missing NEVAR_KEYSTORE_BASE64"; exit 1; }
+          printf '%s' "$SIGNING_KEY" | base64 -d > "$RUNNER_TEMP/nevar-release.jks"
+          echo "NEVAR_KEYSTORE_PATH=$RUNNER_TEMP/nevar-release.jks" >> "$GITHUB_ENV"
+      - name: Build signed APK
+        env:
+          NEVAR_KEYSTORE_PASSWORD: ${{ secrets.NEVAR_KEYSTORE_PASSWORD }}
+          NEVAR_KEY_ALIAS: ${{ secrets.NEVAR_KEY_ALIAS }}
+          NEVAR_KEY_PASSWORD: ${{ secrets.NEVAR_KEY_PASSWORD }}
+        run: |
+          test -n "$NEVAR_KEYSTORE_PASSWORD" && test -n "$NEVAR_KEY_ALIAS" && test -n "$NEVAR_KEY_PASSWORD"
+          gradle :app:assembleRelease --stacktrace -PnevarVersionCode="$((1000 + GITHUB_RUN_NUMBER))" -PnevarVersionName="0.4.$GITHUB_RUN_NUMBER"
+      - name: Verify APK and prepare download
+        run: |
+          APK=app/build/outputs/apk/release/app-release.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep "package: name='com.nevar.discovery'"
+          cp "$APK" NE-VAR-release.apk
+          sha256sum NE-VAR-release.apk > NE-VAR-release.apk.sha256
       - uses: actions/upload-artifact@v4
         with:
-          name: nevar-debug-apk
+          name: nevar-signed-apk
           path: |
-            NE-VAR-debug.apk
-            NE-VAR-debug.apk.sha256
-      - name: Publish direct APK download on GitHub Releases
+            NE-VAR-release.apk
+            NE-VAR-release.apk.sha256
+      - name: Publish APK
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: beta-build-${{ github.run_number }}
+          TAG: signed-build-${{ github.run_number }}
         run: |
-          gh release create "$TAG" NE-VAR-debug.apk NE-VAR-debug.apk.sha256 \
-            --target "$GITHUB_SHA" \
-            --title "NE VAR? Android Beta Build ${{ github.run_number }}" \
-            --notes "Test APK (debug signed). Not a production release. APK can be downloaded directly without ZIP."
+          gh release create "$TAG" NE-VAR-release.apk NE-VAR-release.apk.sha256 --target "$GITHUB_SHA" --title "NE VAR? Signed Build ${{ github.run_number }}" --notes "Signed release APK"
