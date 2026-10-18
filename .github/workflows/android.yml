@@ -27,8 +27,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Build debug APK
-        run: gradle :app:assembleDebug --stacktrace
+      - name: Build signed release APK
+        run: gradle :app:assembleRelease --stacktrace
       - name: Prepare direct-download APK
         run: |
           cp app/build/outputs/apk/debug/app-debug.apk NE-VAR-debug.apk
