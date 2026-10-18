@@ -34,6 +34,30 @@ jobs:
           test -n "$SIGNING_KEY" || { echo "Missing NEVAR_KEYSTORE_BASE64"; exit 1; }
           printf '%s' "$SIGNING_KEY" | base64 -d > "$RUNNER_TEMP/nevar-release.jks"
           echo "NEVAR_KEYSTORE_PATH=$RUNNER_TEMP/nevar-release.jks" >> "$GITHUB_ENV"
+      - name: Validate signing credentials and certificate
+        env:
+          NEVAR_KEYSTORE_PASSWORD: ${{ secrets.NEVAR_KEYSTORE_PASSWORD }}
+          NEVAR_KEY_ALIAS: ${{ secrets.NEVAR_KEY_ALIAS }}
+          NEVAR_KEY_PASSWORD: ${{ secrets.NEVAR_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -s "$NEVAR_KEYSTORE_PATH" || { echo "::error::Signing keystore is missing or empty"; exit 1; }
+          test -n "$NEVAR_KEYSTORE_PASSWORD" && test -n "$NEVAR_KEY_ALIAS" && test -n "$NEVAR_KEY_PASSWORD" || { echo "::error::Signing credentials missing"; exit 1; }
+          if ! keytool -list -keystore "$NEVAR_KEYSTORE_PATH" -storepass "$NEVAR_KEYSTORE_PASSWORD" -alias "$NEVAR_KEY_ALIAS" >/dev/null 2>&1; then
+            echo "::error::Keystore password or alias does not match the uploaded keystore"
+            exit 1
+          fi
+          if ! keytool -importkeystore -srckeystore "$NEVAR_KEYSTORE_PATH" -srcstorepass "$NEVAR_KEYSTORE_PASSWORD" -srcalias "$NEVAR_KEY_ALIAS" -srckeypass "$NEVAR_KEY_PASSWORD" -destkeystore "$RUNNER_TEMP/signing-check.p12" -deststoretype PKCS12 -deststorepass "$NEVAR_KEYSTORE_PASSWORD" -destkeypass "$NEVAR_KEYSTORE_PASSWORD" -noprompt >/dev/null 2>&1; then
+            echo "::error::Private key password does not match the keystore entry"
+            exit 1
+          fi
+          ACTUAL_FINGERPRINT=$(keytool -list -v -keystore "$NEVAR_KEYSTORE_PATH" -storepass "$NEVAR_KEYSTORE_PASSWORD" -alias "$NEVAR_KEY_ALIAS" | sed -n 's/^[[:space:]]*SHA256: //p' | head -n 1)
+          EXPECTED_FINGERPRINT="DA:FB:37:7D:AE:A7:2B:4B:FF:47:DD:58:FD:39:99:EF:90:67:46:10:5F:79:00:8C:D6:6E:AC:4C:14:BF:BA:11"
+          if [ "$ACTUAL_FINGERPRINT" != "$EXPECTED_FINGERPRINT" ]; then
+            echo "::error::GitHub keystore certificate differs from the locally validated backup"
+            exit 1
+          fi
+          echo "Signing keystore and key verified"
       - name: Build signed APK
         env:
           NEVAR_KEYSTORE_PASSWORD: ${{ secrets.NEVAR_KEYSTORE_PASSWORD }}
